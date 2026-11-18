@@ -1,0 +1,8 @@
+__pycache__/
+*.egg-info/
+# downloads and model runs (alrb/config.py, RAW)
+data/raw/
+# render caches of the three-dimensional figures
+figures/_*
+# numbers and table rows written by scripts 70 and 83
+manuscript/

@@ -1,0 +1,146 @@
+{
+ "test_fig": {
+  "figure": "test_fig",
+  "n_text": 15,
+  "n_problems": 0,
+  "problems": []
+ },
+ "fig_sites": {
+  "figure": "fig_sites",
+  "n_text": 66,
+  "n_problems": 0,
+  "problems": []
+ },
+ "fig_evaluation": {
+  "figure": "fig_evaluation",
+  "n_text": 109,
+  "n_problems": 0,
+  "problems": []
+ },
+ "fig_verification": {
+  "figure": "fig_verification",
+  "n_text": 101,
+  "n_problems": 0,
+  "problems": []
+ },
+ "fig_street3d": {
+  "figure": "fig_street3d",
+  "n_text": 20,
+  "n_problems": 0,
+  "problems": []
+ },
+ "fig_thermal": {
+  "figure": "fig_thermal",
+  "n_text": 135,
+  "n_problems": 0,
+  "problems": []
+ },
+ "fig_spacetime3d": {
+  "figure": "fig_spacetime3d",
+  "n_text": 58,
+  "n_problems": 0,
+  "problems": []
+ },
+ "fig_time": {
+  "figure": "fig_time",
+  "n_text": 79,
+  "n_problems": 0,
+  "problems": []
+ },
+ "fig_structural": {
+  "figure": "fig_structural",
+  "n_text": 99,
+  "n_problems": 0,
+  "problems": []
+ },
+ "fig_kernel": {
+  "figure": "fig_kernel",
+  "n_text": 140,
+  "n_problems": 0,
+  "problems": []
+ },
+ "fig_ledger": {
+  "figure": "fig_ledger",
+  "n_text": 98,
+  "n_problems": 0,
+  "problems": []
+ },
+ "fig_manifold3d": {
+  "figure": "fig_manifold3d",
+  "n_text": 48,
+  "n_problems": 0,
+  "problems": []
+ },
+ "fig_design": {
+  "figure": "fig_design",
+  "n_text": 91,
+  "n_problems": 0,
+  "problems": []
+ },
+ "fig_uncertainty": {
+  "figure": "fig_uncertainty",
+  "n_text": 222,
+  "n_problems": 0,
+  "problems": []
+ },
+ "fig_frostmech": {
+  "figure": "fig_frostmech",
+  "n_text": 83,
+  "n_problems": 0,
+  "problems": []
+ },
+ "fig_strain3d": {
+  "figure": "fig_strain3d",
+  "n_text": 19,
+  "n_problems": 0,
+  "problems": []
+ },
+ "fig_canyon": {
+  "figure": "fig_canyon",
+  "n_text": 77,
+  "n_problems": 0,
+  "problems": []
+ },
+ "fig_climate": {
+  "figure": "fig_climate",
+  "n_text": 120,
+  "n_problems": 0,
+  "problems": []
+ },
+ "graphical_abstract": {
+  "figure": "graphical_abstract",
+  "n_text": 30,
+  "n_problems": 0,
+  "problems": []
+ },
+ "fig_conus": {
+  "figure": "fig_conus",
+  "n_text": 35,
+  "n_problems": 0,
+  "problems": []
+ },
+ "fig_season": {
+  "figure": "fig_season",
+  "n_text": 51,
+  "n_problems": 0,
+  "problems": []
+ },
+ "fig_boundary": {
+  "figure": "fig_boundary",
+  "n_text": 56,
+  "n_problems": 0,
+  "problems": []
+ },
+ "fig_canyon_fate": {
+  "figure": "fig_canyon_fate",
+  "n_text": 38,
+  "n_problems": 0,
+  "problems": []
+ },
+ "fig_conus_mc": {
+  "figure": "fig_conus_mc",
+  "n_text": 58,
+  "n_problems": 0,
+  "problems": []
+ }
+}

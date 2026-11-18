@@ -1,0 +1,102 @@
+{
+ "goodridge": {
+  "life_direct": 21.347563890706443,
+  "life_harmonic": 21.56715431280012,
+  "life_quasistatic": 21.305618560648586,
+  "life_at_mean_albedo": 21.51180247482788,
+  "rel_err_harmonic": 0.01028643939036411,
+  "rel_err_quasistatic": -0.0019648766609906554,
+  "mean_albedo": 0.24174208727608856,
+  "frost_max": 2.250000000000001
+ },
+ "wolfpoint": {
+  "life_direct": 21.20000644411866,
+  "life_harmonic": 21.442782585876962,
+  "life_quasistatic": 21.20098831262706,
+  "life_at_mean_albedo": 21.432463589741726,
+  "rel_err_harmonic": 0.011451701318970775,
+  "rel_err_quasistatic": 4.6314538205027844e-05,
+  "mean_albedo": 0.24174135212397718,
+  "frost_max": 1.9300000000000006
+ },
+ "ithaca": {
+  "life_direct": 20.980769385003196,
+  "life_harmonic": 21.312809400918635,
+  "life_quasistatic": 21.03189881641379,
+  "life_at_mean_albedo": 21.301473622551907,
+  "rel_err_harmonic": 0.015825921815468602,
+  "rel_err_quasistatic": 0.0024369664654499967,
+  "mean_albedo": 0.2417382124111483,
+  "frost_max": 1.13
+ },
+ "lajunta": {
+  "life_direct": 21.29025649179227,
+  "life_harmonic": 21.53829550513336,
+  "life_quasistatic": 21.278822633037905,
+  "life_at_mean_albedo": 21.494702120231352,
+  "rel_err_harmonic": 0.011650353458010798,
+  "rel_err_quasistatic": -0.0005370465479724862,
+  "mean_albedo": 0.24174135212397718,
+  "frost_max": 0.73
+ },
+ "wooster": {
+  "life_direct": 21.19554469211839,
+  "life_harmonic": 21.340824895194,
+  "life_quasistatic": 21.14597983427342,
+  "life_at_mean_albedo": 21.325732980547468,
+  "rel_err_harmonic": 0.006854280236055166,
+  "rel_err_quasistatic": -0.0023384564334126834,
+  "mean_albedo": 0.2417382124111483,
+  "frost_max": 0.8899999999999999
+ },
+ "bowlinggreen": {
+  "life_direct": 20.94312171291214,
+  "life_harmonic": 21.091072141950004,
+  "life_quasistatic": 20.97204201091394,
+  "life_at_mean_albedo": 21.060828152920244,
+  "rel_err_harmonic": 0.007064392360697891,
+  "rel_err_quasistatic": 0.0013808971937534498,
+  "mean_albedo": 0.24174208727608856,
+  "frost_max": 0.5753819899726091
+ },
+ "monahans": {
+  "life_direct": 20.786760092855996,
+  "life_harmonic": 21.000784013539842,
+  "life_quasistatic": 20.79393889596312,
+  "life_at_mean_albedo": 20.961377312975824,
+  "rel_err_harmonic": 0.01029616543067724,
+  "rel_err_quasistatic": 0.00034535459470630414,
+  "mean_albedo": 0.24174208727608856,
+  "frost_max": 0.35
+ },
+ "durham": {
+  "life_direct": 21.053612487211335,
+  "life_harmonic": 21.146065945900503,
+  "life_quasistatic": 21.070869892213107,
+  "life_at_mean_albedo": 21.136462111207745,
+  "rel_err_harmonic": 0.004391334681652648,
+  "rel_err_quasistatic": 0.0008196885457190106,
+  "mean_albedo": 0.2417382124111483,
+  "frost_max": 0.4166889862259674
+ },
+ "merced": {
+  "life_direct": 21.01159446951796,
+  "life_harmonic": 21.20555763450537,
+  "life_quasistatic": 21.015012728998084,
+  "life_at_mean_albedo": 21.169333947459123,
+  "rel_err_harmonic": 0.009231244457378107,
+  "rel_err_quasistatic": 0.00016268444001643623,
+  "mean_albedo": 0.24174061687970172,
+  "frost_max": 0.0
+ },
+ "tucson": {
+  "life_direct": 20.82040931056146,
+  "life_harmonic": 21.067507504626814,
+  "life_quasistatic": 20.831911102847897,
+  "life_at_mean_albedo": 21.005262902605175,
+  "rel_err_harmonic": 0.011868075712613946,
+  "rel_err_quasistatic": 0.0005524287306206688,
+  "mean_albedo": 0.24174135212397718,
+  "frost_max": 0.0
+ }
+}

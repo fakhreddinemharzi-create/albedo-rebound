@@ -1,0 +1,18 @@
+# Python 3.11; versions used for the paper
+numpy==2.4.6
+scipy==1.17.1
+pandas==3.1.1
+pyarrow==26.0.1
+numba==0.68.1
+SALib==1.6.0
+matplotlib==3.11.2
+contourpy==1.3.3
+SciencePlots==2.2.2
+cmcrameri==1.10
+PyMuPDF==2.1
+requests==2.34.2
+rasterio==1.4.4
+pyproj==3.7.2
+# needed only to retrieve the raw data (scripts 00-04) and for the
+# three-dimensional renderings (fig_*3d.py, fig_canyon.py)
+# numcodecs h5py pvlib pyvista mitsuba

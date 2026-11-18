@@ -1,0 +1,20 @@
+{
+ "source": "Demuzere et al. (2020), doi:10.6084/m9.figshare.11416950",
+ "built_km2": 269943.29342621035,
+ "built_outside_cells_km2": 22031.793352805278,
+ "share_of_built": {
+  "compact high-rise": 0.0003085435166648956,
+  "compact mid-rise": 0.0011941768560764013,
+  "compact low-rise": 0.000687003544419758,
+  "open high-rise": 0.0004404049836187272,
+  "open mid-rise": 0.0010583359103501853,
+  "open low-rise": 0.9738924782287625,
+  "lightweight low-rise": 0.0,
+  "large low-rise": 0.019690052573952243,
+  "sparsely built": 0.0,
+  "heavy industry": 0.0027290043861555834
+ },
+ "paved_km2": 99670.79947248884,
+ "cells_with_built": 817,
+ "ncells": 817
+}
