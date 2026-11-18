@@ -29,14 +29,21 @@ The urban-form factor of a street is that of the nearest station at the drawn
 geometry (64_canyon.py), transferred to the latitude of the cell with the
 latitude dependence fitted across the ten stations.  The structural term of
 a street in a canyon or in a warmer city is scaled by the factors simulated
-with the canyon forcing (85_urban_column.py).  Cells are weighted by their
-paved area (reference), population or area.
+with the canyon forcing (85_urban_column.py; the factor of H/W = 2 is used
+for deeper streets).  Cells are weighted by their paved area (reference),
+population or cell area, or by the paved area of the sunniest cells that
+hold a quarter of it (largest snow-masked kernel); the sensitivity that
+counts the paved land of class E as open streets also adds it to the
+weights.  Alternative descriptions of the form: the nominal aspect-ratio
+ranges of the classes instead of the conversion of their sky-view factor,
+and assumed mixes of aspect-ratio classes.
 
 Part 2 moves one property of the reference street at a time, and the aspect
 ratio and the decay time together, away from the reference in every cell and
 records the factor by which the rebound ratio changes; it also bounds the
 nearest-station assumptions.  Part 3 repeats the Monte Carlo with correlated
-coating properties.
+coating properties, and with the street properties shared by the streets of a
+cell.
 
 usage: python 82_conus_mc.py [n_products] [streets_per_cell] [--part3]
 Writes results/conus_mc_v3.json and results/conus_mc_v3.npz.
@@ -55,8 +62,9 @@ from alrb.config import ALBEDO_GRID, REF, RES, SITES  # noqa: E402
 
 TAG = "v3"
 _ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
-NPROD = int(_ARGS[0]) if len(_ARGS) > 0 else 300
-NS = int(_ARGS[1]) if len(_ARGS) > 1 else 20
+NPROD = int(_ARGS[0]) if len(_ARGS) > 0 else 1200
+NS = int(_ARGS[1]) if len(_ARGS) > 1 else 5
+NBOOT = 2000
 METRICS = ("static", "dynamic", "gtp")
 NQUAD = 401
 ORIENT = ("EW", "NS", "diag")
@@ -75,6 +83,10 @@ MIXES = {
 LCZ = {1: (0.2, 0.4, 50.0), 2: (0.3, 0.6, 40.0), 3: (0.2, 0.6, 35.0), 4: (0.5, 0.7, 35.0), 5: (0.5, 0.8, 40.0),
        6: (0.6, 0.9, 35.0), 8: (0.7, 1.0, 45.0), 10: (0.6, 0.9, 30.0)}
 LCZ_E = {15: (0.9, 1.0, 95.0)}              # bare rock or paved, as open paved streets (sensitivity)
+# nominal aspect-ratio ranges of the classes (Stewart and Oke, 2012, Table 2; class 1, H/W > 2, capped at 3),
+# an alternative to the conversion of the sky-view factor (sensitivity)
+LCZ_HW = {1: (2.0, 3.0), 2: (0.75, 2.0), 3: (0.75, 1.5), 4: (0.75, 1.25), 5: (0.3, 0.75), 6: (0.3, 0.75),
+          8: (0.1, 0.3), 10: (0.2, 0.5)}
 LCZ_NAME = {1: "compact high-rise", 2: "compact mid-rise", 3: "compact low-rise", 4: "open high-rise",
             5: "open mid-rise", 6: "open low-rise", 8: "large low-rise", 10: "heavy industry", 15: "paved"}
 
@@ -171,8 +183,9 @@ class Structure:
         self.variants = None
         if v.exists():
             vj = json.loads(v.read_text())
-            self.variant_names = list(vj["sites"][SITES[0].key]["factor"].keys())
-            self.variants = np.array([[vj["sites"][s.key]["factor"][n] for n in self.variant_names] for s in SITES])
+            self.variant_names = ["reference"] + list(vj["sites"][SITES[0].key]["factor"].keys())
+            self.variants = np.array([[1.0] + [vj["sites"][s.key]["factor"][n] for n in self.variant_names[1:]]
+                                      for s in SITES])
 
     def geom_factor(self, site, h):
         if self.source == "proxy":
@@ -186,10 +199,13 @@ class Structure:
             return np.ones_like(dT)
         return 1.0 + (self.uhi[site] - 1.0) * dT / UHI_MAX
 
-    def variant_factor(self, site, rng):
+    def variant_factor(self, site, rng, ns_shared=None):
         if self.variants is None:
             return np.ones(len(site))
-        k = rng.integers(0, self.variants.shape[1], len(site))
+        if ns_shared:                                   # one structure for all streets of a cell and realisation
+            k = np.repeat(rng.integers(0, self.variants.shape[1], len(site) // ns_shared), ns_shared)
+        else:
+            k = rng.integers(0, self.variants.shape[1], len(site))
         return self.variants[site, k]
 
 
@@ -201,16 +217,17 @@ def wquant(x, w, q):
 
 def draw_products(rng, n, design, corr=None):
     """Coating products and systematic factors; ``corr`` maps a pair of
-    (af, tau, gco) to a Spearman rank correlation (Gaussian copula)."""
-    names = ["af", "tau", "gco"]
-    R = np.eye(3)
+    (af, tau, gco, Tr) to a Spearman rank correlation (Gaussian copula; the
+    renewal interval is fixed at three years in design B)."""
+    names = ["af", "tau", "gco", "Tr"]
+    R = np.eye(4)
     for (a, b), rs in (corr or {}).items():
         i, j = names.index(a), names.index(b)
         R[i, j] = R[j, i] = 2.0 * np.sin(np.pi * rs / 6.0)
-    u = norm.cdf(rng.standard_normal((n, 3)) @ np.linalg.cholesky(R).T)
+    u = norm.cdf(rng.standard_normal((n, 4)) @ np.linalg.cholesky(R).T)
     P = dict(af=0.25 + 0.35 * u[:, 0], tau=10 ** (np.log10(0.5) + (np.log10(3.0) - np.log10(0.5)) * u[:, 1]),
              gco=1.63 + (3.39 - 1.63) * u[:, 2], resid=rng.uniform(0.0, 0.05, n),
-             Tr=np.full(n, 3.0) if design == "B" else rng.uniform(1.0, 10.0, n),
+             Tr=np.full(n, 3.0) if design == "B" else 1.0 + 9.0 * u[:, 3],
              eff=rng.uniform(0.60, 1.10, n), kmult=rng.uniform(0.85, 1.15, n))
     return P
 
@@ -244,8 +261,17 @@ class Setup:
         self.lcz_area = A                                                     # (18, nc), km2
         pop = np.load(RES / "conus_population_v3.npz")["pop"][self.ia, self.ib]
         paved = sum(A[c] * LCZ[c][2] / 100.0 for c in LCZ)
-        self.W = {"paved": paved / paved.sum(), "pop": pop / pop.sum(),
+        paved_e = paved + A[15] * LCZ_E[15][2] / 100.0
+        self.W = {"paved": paved / paved.sum(), "paved_e": paved_e / paved_e.sum(), "pop": pop / pop.sum(),
                   "area": np.cos(np.radians(self.lat[self.ia])) / np.cos(np.radians(self.lat[self.ia])).sum()}
+        # deployment in the sunniest quarter of the paved area (largest snow-masked kernel)
+        Kabs = np.abs(self.Kd.mean(axis=1))
+        o = np.argsort(-Kabs)
+        cum = np.cumsum(self.W["paved"][o])
+        sunny = np.zeros(self.nc, bool)
+        sunny[o[: int(np.searchsorted(cum, 0.25)) + 1]] = True
+        self.W["sunny"] = np.where(sunny, paved, 0.0) / np.sum(np.where(sunny, paved, 0.0))
+        self.sunny = sunny
         self.al, self.hs, self.Ltab = life_tables()
         self.cy = Canyon()
         self.st = Structure()
@@ -274,12 +300,18 @@ def draw_form(rng, setup, morph, cell):
     keys, cls, p = setup.class_probs(with_e=(morph == "lcz_e"))
     cum = np.cumsum(p, axis=1)
     k = np.minimum((rng.random(n)[:, None] > cum[cell]).sum(1), len(keys) - 1)
+    if morph == "lcz_nom":                                     # nominal aspect ratios of the classes
+        lo = np.array([LCZ_HW[c][0] for c in keys])[k]
+        hi = np.array([LCZ_HW[c][1] for c in keys])[k]
+        return lo + (hi - lo) * rng.random(n), np.array(keys)[k]
     lo = np.array([cls[c][0] for c in keys])[k]
     hi = np.array([cls[c][1] for c in keys])[k]
     return svf_to_h(lo + (hi - lo) * rng.random(n)), np.array(keys)[k]
 
 
-def evaluate_streets(setup, rng, design, nprod, ns, corr=None):
+def evaluate_streets(setup, rng, design, nprod, ns, corr=None, shared=False):
+    """``shared``: the street properties other than form and orientation are
+    drawn once per cell and realisation (perfect correlation within a cell)."""
     P = draw_products(rng, nprod, design, corr)
     cal = np.array([np.median(rng.choice(setup.ratios, len(setup.ratios))) for _ in range(nprod)]) / setup.ratio
     sysf = P["eff"] * P["kmult"] * cal
@@ -288,14 +320,16 @@ def evaluate_streets(setup, rng, design, nprod, ns, corr=None):
     n = int(np.prod(shape))
     Pi, Ci, _ = np.meshgrid(np.arange(nprod), np.arange(nc), np.arange(ns), indexing="ij")
     Pi, Ci = Pi.ravel(), Ci.ravel()
-    a0 = rng.uniform(0.09, 0.18, n)
-    gst = 10 ** rng.uniform(np.log10(6.0), np.log10(70.0), n)
-    hm = rng.uniform(0.60, 1.60, n)
+    draw = (lambda f: np.repeat(f(nprod * nc), ns)) if shared else (lambda f: f(n))  # noqa: E731
+    a0 = draw(lambda k: rng.uniform(0.09, 0.18, k))
+    gst = draw(lambda k: 10 ** rng.uniform(np.log10(6.0), np.log10(70.0), k))
+    hm = draw(lambda k: rng.uniform(0.60, 1.60, k))
     site = setup.near[Ci]
     r = lb.evaluate(setup.Kd, Ci, a0, P["af"][Pi], a0 + P["resid"][Pi], P["tau"][Pi], P["Tr"][Pi], P["gco"][Pi], gst,
                     hm, site, setup.al, setup.hs, setup.Ltab, nquad=NQUAD)
-    street = dict(dT=rng.uniform(0.0, UHI_MAX, n), orient=rng.integers(0, 3, n), aw=rng.uniform(0.10, 0.60, n),
-                  fvar=setup.st.variant_factor(site, rng))
+    street = dict(dT=draw(lambda k: rng.uniform(0.0, UHI_MAX, k)), orient=rng.integers(0, 3, n),
+                  aw=draw(lambda k: rng.uniform(0.10, 0.60, k)),
+                  fvar=setup.st.variant_factor(site, rng, ns if shared else None))
     return dict(P=P, sysf=sysf, shape=shape, Pi=Pi, Ci=Ci, site=site, r=r, street=street)
 
 
@@ -335,6 +369,20 @@ def statistics(setup, E, T, wname, maps=None, mapkey=None):
                       p_source_diverse=float(np.mean(div_net > 0)),
                       share_streets_source=float(np.sum(wflat * (net.ravel() > 0))),
                       R_streets=[float(v) for v in wquant(Rs, wflat, [0.05, 0.25, 0.5, 0.75, 0.95])])
+        # Monte Carlo precision: bootstrap over the realisations (95 % intervals)
+        bi = np.random.default_rng(5).integers(0, nprod, (NBOOT, nprod))
+        bs = nat_net[bi]
+        res[m]["net_ci"] = np.percentile(np.percentile(bs, [5, 50, 95], axis=1), [2.5, 97.5], axis=1).T.tolist()
+        res[m]["p_source_ci"] = np.percentile(np.mean(bs > 0, axis=1), [2.5, 97.5]).tolist()
+        share_r = np.sum(w3 * (net > 0), axis=(1, 2))                     # share of streets, per realisation
+        res[m]["share_streets_source_ci"] = np.percentile(share_r[bi].mean(axis=1), [2.5, 97.5]).tolist()
+        # sources of the interval of a one-product programme: the product alone (systematic factors at their
+        # median) and the systematic factors alone (every street with its own product)
+        fix = nat_bu - np.median(E["sysf"]) * (nat_cr / E["sysf"])
+        res[m]["net_productonly"] = q(fix)
+        res[m]["var_share"] = dict(product=float(np.var(fix) / np.var(nat_net)),
+                                   systematic=float(np.var(div_net) / np.var(nat_net)))
+        res[m]["share_burden_nonpositive"] = float(np.sum(wflat * (burden.ravel() <= 0)))
         if m == "dynamic" and maps is not None:
             src = (net > 0).mean(axis=(0, 2))
             Rq = np.empty((nc, 3))
@@ -345,13 +393,25 @@ def statistics(setup, E, T, wname, maps=None, mapkey=None):
             res[m]["cells_psource"] = dict(min=float(src.min()), med=float(np.median(src)), max=float(src.max()),
                                            share_w_gt90=float(np.sum(wc * (src > 0.9))))
             res[m]["cellfold_med"] = float(np.median(Rq[:, 2] / Rq[:, 0]))
+            # variance of ln R within a cell: between streets (within a realisation), systematic factors, product
+            lnR = np.log(np.clip(burden, 1e-6, None) / credit)
+            vt = lnR.transpose(1, 0, 2).reshape(nc, -1).var(axis=1)
+            vw = lnR.var(axis=2, ddof=1).mean(axis=0)
+            vs = float(np.var(np.log(E["sysf"])))
+            lpsi = np.log(T[m][2]).reshape(E["shape"])
+            vpsi = lpsi.transpose(1, 0, 2).reshape(nc, -1).var(axis=1)
+            res[m]["lnR_variance"] = dict(street=float(np.sum(wc * vw / vt)), systematic=float(np.sum(wc * vs / vt)),
+                                          product=float(np.sum(wc * (1 - (vw + vs) / vt))),
+                                          form=float(np.sum(wc * vpsi / vt)),
+                                          street_fold_med=float(np.median(np.exp(2 * 1.6449 * np.sqrt(vw)))),
+                                          form_fold_med=float(np.median(np.exp(2 * 1.6449 * np.sqrt(vpsi)))))
             res[m]["hist_nat_net"] = nat_net.tolist()
     return res
 
 
 def part1(setup, rng, maps):
     out = {}
-    morphs = ["lcz", "lcz_e", "open", "lowrise", "mixed", "compact"]
+    morphs = ["lcz", "lcz_e", "lcz_nom", "open", "lowrise", "mixed", "compact"]
     for design in ("B", "A"):
         E = evaluate_streets(setup, rng, design, NPROD, NS)
         res = dict(n_products=NPROD, n_streets=int(np.prod(E["shape"])), n_cells=setup.nc,
@@ -360,9 +420,10 @@ def part1(setup, rng, maps):
             h, lab = draw_form(rng, setup, morph, E["Ci"])
             T = terms(setup, E, h)
             res[morph] = {}
-            for wname in ("paved", "pop", "area"):
+            for wname in ("paved", "pop", "area", "sunny"):
                 mk = f"{design}_{morph}" if (wname == "paved" and morph in ("lcz", "open")) else None
-                res[morph][wname] = statistics(setup, E, T, wname, maps if mk else None, mk)
+                wuse = "paved_e" if (morph == "lcz_e" and wname == "paved") else wname   # class E adds paved area
+                res[morph][wname] = statistics(setup, E, T, wuse, maps if mk else None, mk)
             if morph == "lcz":
                 wc = setup.W["paved"][E["Ci"]] / NS / NPROD
                 res["lcz_h"] = dict(mean=float(np.sum(wc * h)), q=[float(v) for v in wquant(h, wc, [0.05, 0.25, 0.5, 0.75, 0.95])],
@@ -386,7 +447,7 @@ def part1(setup, rng, maps):
               f"{d['share_streets_source']:.4f}, street R {d['R_streets'][2]:.2f} [{d['R_streets'][0]:.2f}, {d['R_streets'][4]:.2f}]"
               f" | cells {d['cells_psource']['min']:.3f}-{d['cells_psource']['max']:.3f}", flush=True)
         for morph in morphs:
-            for wname in ("paved", "pop", "area"):
+            for wname in ("paved", "pop", "area", "sunny"):
                 d = res[morph][wname]["dynamic"]
                 print(f"   {morph:8s} {wname:5s} net {d['net'][2]:6.1f} [{d['net'][0]:6.1f},{d['net'][4]:6.1f}] P {d['p_source']:.3f}"
                       f" | streets {d['share_streets_source']:.4f} R {d['R_streets'][2]:5.2f} | static P "
@@ -403,14 +464,19 @@ def part3(setup, rng):
     that the cases differ only by the correlation."""
     cases = {"independent": None, "tau_gco+0.5": {("tau", "gco"): 0.5}, "tau_gco-0.5": {("tau", "gco"): -0.5},
              "af_tau-0.5": {("af", "tau"): -0.5}, "af_tau+0.5": {("af", "tau"): 0.5},
-             "af_gco+0.5": {("af", "gco"): 0.5}}
+             "af_gco+0.5": {("af", "gco"): 0.5}, "Tr_tau+0.5": {("Tr", "tau"): 0.5}, "Tr_tau+0.8": {("Tr", "tau"): 0.8}}
+    cases["shared_street"] = "shared"                  # street properties drawn once per cell and realisation
     out = {}
     for design in ("B", "A"):
         out[design] = {}
         seed = int(rng.integers(2 ** 31))
         for name, corr in cases.items():
+            shared = corr == "shared"
+            corr = None if shared else corr
+            if design == "B" and corr and "Tr" in next(iter(corr)):
+                continue                                   # renewal interval fixed in design B
             crn = np.random.default_rng(seed)
-            E = evaluate_streets(setup, crn, design, NPROD // 2, max(4, NS // 4), corr)
+            E = evaluate_streets(setup, crn, design, NPROD // 2, 2, corr, shared=shared)
             if corr:
                 (a, b), rs = next(iter(corr.items()))
                 from scipy.stats import spearmanr
@@ -423,6 +489,11 @@ def part3(setup, rng):
             out[design][name] = dict(rho_sample=rho, net=d["net"], p_source=d["p_source"],
                                      share_streets_source=d["share_streets_source"], R_streets=d["R_streets"],
                                      static_share=st["static"]["share_streets_source"])
+            if shared or name == "independent":            # spread of the share of sources between cells
+                cr, bu, _ = terms(setup, E, h)["dynamic"]
+                cs = ((bu - cr) > 0).mean(axis=(0, 2))
+                out[design][name]["cells_psource"] = dict(min=float(cs.min()), p05=float(np.percentile(cs, 5)),
+                                                          med=float(np.median(cs)))
             print(f"corr {design} {name:12s} rho {rho:+.2f} net {d['net'][2]:6.1f} [{d['net'][0]:6.1f},{d['net'][4]:6.1f}] "
                   f"P {d['p_source']:.3f} streets {d['share_streets_source']:.4f}", flush=True)
     return out
@@ -470,6 +541,13 @@ def part2(setup, maps):
                                          share_paved_source=float(np.sum(W["paved"] * (Rj > 1))),
                                          share_pop_source=float(np.sum(W["pop"] * (Rj > 1))))
     dist["joint"] = joint
+    jt = {}
+    for b in tt:
+        for c in (1.0, 2.0, 3.0, 5.0, 10.0):
+            Rj = R_of(tau=b, Tr=c)
+            jt[f"{b:g}|{c:g}"] = dict(R=stat(Rj), share_cells_source=float(np.mean(Rj > 1)),
+                                      share_paved_source=float(np.sum(W["paved"] * (Rj > 1))))
+    dist["joint_tau_Tr"] = jt
     # nearest-station assumptions: structure and canyon factor of any other station; latitude transfer
     Rl = np.array([R_of(life=j) for j in range(len(SITES))])
     dist["life_station"] = dict(max_abs_pct=float(100 * np.max(np.abs(Rl / R0[None, :] - 1))),

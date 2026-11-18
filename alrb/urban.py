@@ -35,7 +35,7 @@ from .driver import SubForcing
 SIGMA = 5.670374419e-8
 T0K = 273.15
 TP = np.radians(np.linspace(0.0, 89.75, 360))
-ALB_SNOW = 0.6
+ALB_SNOW = 0.6           # albedo of snow on the street; must equal the alb_snow default of driver.run
 
 
 def teb_wind(h):

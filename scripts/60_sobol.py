@@ -88,7 +88,7 @@ def run_site(args):
         f = w - j0
         K = (1 - f) * bank[j0] + f * bank[j1]
         life = lambda a, h=v["hmult"]: lf(a, h)
-        r = ledger.evaluate(K, p, life)
+        r = ledger.evaluate(K, p, life, L0=life(v["alpha0"]))        # untreated life at its own albedo
         for m in METRICS:
             Y[m][i] = r[m]["G_net"]
             comps[m][i] = (r[m]["G_rf"], r[m]["G_co"], r[m]["G_st"])

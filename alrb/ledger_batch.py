@@ -4,7 +4,10 @@ Evaluates the ledger of ``ledger.evaluate`` for arrays of parameter sets in
 one compiled, parallel pass.  The terms are returned separately and for an
 open street with unit efficacy, so that the urban-form factor, the efficacy
 and a kernel multiplier, which scale the radiative term only, can be applied
-afterwards.  ``check`` compares the result with ``ledger.evaluate``.
+afterwards.  The structural term compares the harmonic-mean life of the
+treated surface with the life of the untreated surface at its own albedo
+alpha0 (``L0=None``, the default) or with a fixed life ``L0``.  It agrees
+with ``ledger.evaluate`` to round-off for the same parameters.
 """
 from __future__ import annotations
 
@@ -144,7 +147,8 @@ def _batch(Kd, cell, alpha0, alphaf, alpha_inf, tau, Tr, g_co, g_st, hmult, life
             v = 1.0 / _life(a, hmult[i], al, hs, Ltab[j])
             acc += v if (q > 0 and q < nquad - 1) else 0.5 * v
         L_eff = (nquad - 1) / acc
-        rate = g_st[i] * (1.0 / L_eff - 1.0 / L0) * st_scale[i]
+        L_base = L0 if L0 > 0 else _life(alpha0[i], hmult[i], al, hs, Ltab[j])
+        rate = g_st[i] * (1.0 / L_eff - 1.0 / L_base) * st_scale[i]
         for y in range(ny):
             ty = y + 0.5
             out[i, 5] += rate
@@ -155,7 +159,7 @@ def _batch(Kd, cell, alpha0, alphaf, alpha_inf, tau, Tr, g_co, g_st, hmult, life
 
 
 def evaluate(Kd, cell, alpha0, alphaf, alpha_inf, tau, Tr, g_co, g_st, hmult, life_id, al, hs, Ltab,
-             st_scale=None, L0=20.0, H=50.0, TH=100.0, nquad=2001):
+             st_scale=None, L0=None, H=50.0, TH=100.0, nquad=2001):
     """Ledger terms for n parameter sets.
 
     Kd      : (ncell, ndays) daily kernels (W m-2 per unit albedo)
@@ -163,6 +167,8 @@ def evaluate(Kd, cell, alpha0, alphaf, alpha_inf, tau, Tr, g_co, g_st, hmult, li
     life_id : (n,) row of Ltab (ntab, nh, nal), the life tables L(alpha) at
               the convective multipliers hs
     st_scale: (n,) factor on the structural term (1 for an open street)
+    L0      : life of the untreated surface (yr); None: L(alpha0) from the
+              life table of the sample
 
     Returns a dict of arrays: G_rf (static = dynamic, gtp) for psi = E = 1,
     G_co and G_st (static, dynamic, gtp), and L_eff.
@@ -174,7 +180,7 @@ def evaluate(Kd, cell, alpha0, alphaf, alpha_inf, tau, Tr, g_co, g_st, hmult, li
                f8(alpha_inf), f8(tau), f8(Tr), f8(g_co), f8(g_st), f8(hmult),
                np.ascontiguousarray(np.broadcast_to(np.asarray(life_id, np.int64), (n,))), st,
                np.ascontiguousarray(al, float), np.ascontiguousarray(hs, float), np.ascontiguousarray(Ltab, float),
-               L0, H, TH, A_EARTH, nquad)
+               -1.0 if L0 is None else float(L0), H, TH, A_EARTH, nquad)
     return dict(G_rf=dict(static=o[:, 0], dynamic=o[:, 0], gtp=o[:, 1]),
                 G_co=dict(static=o[:, 2], dynamic=o[:, 3], gtp=o[:, 4]),
                 G_st=dict(static=o[:, 5], dynamic=o[:, 6], gtp=o[:, 7]), L_eff=o[:, 8])

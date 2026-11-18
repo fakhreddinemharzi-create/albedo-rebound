@@ -443,6 +443,7 @@ def canyon_numbers():
         rng(f"cy.all.{tag}", allo, 2)
         R = [cy["sites"][k]["R_open"] / cy["sites"][k][o]["psi"][jj] for k in KEYS for o in ("EW", "NS", "diag")]
         rng(f"cy.R.{tag}", R, 1)
+        rng(f"cy.REW.{tag}", [cy["sites"][k]["R_open"] / cy["sites"][k]["EW"]["psi"][jj] for k in KEYS], 1)  # as in the figure
     # aspect ratio at which psi falls to 0.6 (lower end of the sensitivity range) and to 0.5
     for thr in (0.6, 0.5):
         hs = []

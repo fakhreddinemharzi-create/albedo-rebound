@@ -22,7 +22,8 @@ fc = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fc)
 
 TAG = "v3"
-MIXLAB = {"lcz": "measured\nform", "open": "open\nstreets", "lowrise": "assumed\nlow-rise", "compact": "assumed\ncompact"}
+CASES = [("lcz", "paved", "LCZ\nform"), ("lowrise", "paved", "assumed\nlow-rise"), ("compact", "paved", "assumed\ncompact"),
+         ("open", "paved", "open\nstreets"), ("open", "sunny", "open streets,\nsunniest cells")]
 
 
 def main():
@@ -54,7 +55,7 @@ def main():
     lo = 5 * np.floor(v.min() / 5)
     norm = matplotlib.colors.Normalize(lo, 100.0)
     fc.draw_map(ax, polys, v, cm.lajolla, norm, states, neigh, border)
-    fc.colourbar(fig, ax, cm.lajolla, norm, r"Streets that are net sources (\%), $T_r$ sampled",
+    fc.colourbar(fig, ax, cm.lajolla, norm, r"Treated streets that are net sources (\%), $T_r$ sampled",
                  list(np.arange(lo, 100.1, 5 if 100 - lo <= 30 else 10)))
     ax.text(0.005, 0.995, r"\textbf{(b)}", transform=ax.transAxes, ha="left", va="top", fontsize=7.5)
     gs = fig.add_gridspec(1, 3, left=0.062, right=0.99, bottom=0.085, top=0.405, wspace=0.40)
@@ -97,20 +98,21 @@ def main():
     P.panel_label(ax, "d")
     # (e) national balance per square metre of treated street
     ax = fig.add_subplot(gs[0, 2])
-    mixes = ["lcz", "open", "lowrise", "compact"]
-    for k, mix in enumerate(mixes):
+    for k, (mix, wn, _) in enumerate(CASES):
         for design, dy, col in (("B", 0.16, C.BURDEN), ("A", -0.16, C.CREDIT)):
-            d = js["part1"][design][mix]["paved"]["dynamic"]
-            y = len(mixes) - 1 - k + dy
+            d = js["part1"][design][mix][wn]["dynamic"]
+            y = len(CASES) - 1 - k + dy
             ax.plot([d["net"][0], d["net"][4]], [y, y], color=col, lw=1.0, solid_capstyle="butt")
             ax.plot([d["net"][1], d["net"][3]], [y, y], color=col, lw=3.0, solid_capstyle="butt")
             ax.plot(d["net"][2], y, marker="o", ms=3.2, mfc="white", mec=col, mew=0.8, ls="none")
     ax.axvline(0.0, color=C.GREY, lw=0.5, zorder=0)
-    ax.set_yticks(range(len(mixes)))
-    ax.set_yticklabels([MIXLAB[m] for m in mixes[::-1]], linespacing=0.95)
+    ax.set_yticks(range(len(CASES)))
+    ax.set_yticklabels([c[2] for c in CASES[::-1]], linespacing=0.95)
     ax.tick_params(axis="y", which="both", length=0)
-    ax.set_ylim(-0.55, len(mixes) + 0.25)
-    ax.set_xlim(-12, 72)
+    ax.set_ylim(-0.55, len(CASES) + 0.25)
+    lo = min(js["part1"][d][m][w]["dynamic"]["net"][0] for d in ("A", "B") for m, w, _ in CASES)
+    hi = max(js["part1"][d][m][w]["dynamic"]["net"][4] for d in ("A", "B") for m, w, _ in CASES)
+    ax.set_xlim(10 * np.floor(lo / 10) - 2, 10 * np.ceil(hi / 10) + 12)
     ax.set_xlabel(r"National balance (kg\,CO$_2$e\,m$^{-2}$)")
     ax.plot([], [], color=C.BURDEN, lw=3.0, label=r"$T_r=3$\,yr")
     ax.plot([], [], color=C.CREDIT, lw=3.0, label=r"$T_r$ 1--10\,yr")

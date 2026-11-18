@@ -22,6 +22,7 @@ from alrb.config import MS, RES, SITES  # noqa: E402
 
 TAG = "v3"
 OUT = MS / "generated"
+OUT.mkdir(parents=True, exist_ok=True)
 V = {}
 KEYS = C.SITE_ORDER
 CODE = C.SITE_CODE if hasattr(C, "SITE_CODE") else None
@@ -48,6 +49,19 @@ def pct(x, nd=0):
     if p >= 90.0 or nd > 0:
         return f"{p:.1f}"
     return f"{p:.0f}"
+
+
+def pct_mc(x, mode="round"):
+    """Share in whole per cent for Monte Carlo statistics (their precision); ``floor`` for lower
+    bounds and ``ceil`` for upper bounds, so that a rounded bound is never stronger than the value."""
+    p = 100.0 * x
+    if p >= 100.0 - 1e-9:
+        return "100"
+    if mode == "floor":
+        return f"{int(np.floor(p + 1e-9))}"
+    if mode == "ceil":
+        return f"{min(100, int(np.ceil(p - 1e-9)))}"
+    return "$>$99" if p >= 99.5 else f"{p:.0f}"
 
 
 def load(name):
@@ -79,6 +93,14 @@ def main():
     put("dsc.pr.gtp.dR.lo", -min(g9[k]["prorata"]["gtp"]["dR_min_pct"] for k in KEYS), 1)
     put("dsc.pr.gtp.dR.hi", max(g9[k]["prorata"]["gtp"]["dR_max_pct"] for k in KEYS), 1)
     put("dsc.cf.dyn.dev", max(100 * abs(g9[k]["cashflow"]["dynamic"]["mean"] / g9[k]["flow"]["dynamic"] - 1) for k in KEYS), 1)
+    # signed offsets of the mean discrete term from the flow (systematic, the same sign at every site)
+    for m, mk in (("dynamic", "dyn"), ("gtp", "gtp")):
+        dv = [100 * (g9[k]["prorata"][m]["mean"] / g9[k]["flow"][m] - 1) for k in KEYS]
+        put(f"dsc.pr.{mk}.off.lo", min(dv), 1)
+        put(f"dsc.pr.{mk}.off.hi", max(dv), 1)
+        put(f"dsc.pr.{mk}.off.abs", max(abs(x) for x in dv), 1)
+    put("dsc.cf.all.dev", max(100 * abs(g9[k]["cashflow"][m]["mean"] / g9[k]["flow"][m] - 1)
+                              for k in KEYS for m in ("static", "dynamic", "gtp")), 1)
     put("dsc.cf.share.min", min(100 * g9[k]["cashflow"]["dynamic"]["share_avoided"] for k in KEYS), 0)
     put("dsc.cf.share.max", max(100 * g9[k]["cashflow"]["dynamic"]["share_avoided"] for k in KEYS), 0)
     put("dsc.cf.dyn.dR.lo", -min(g9[k]["cashflow"]["dynamic"]["dR_min_pct"] for k in KEYS), 0)
@@ -100,6 +122,10 @@ def main():
                 if tu < 50 <= tt:
                     slip = max(slip, tt - 50)
     put("dsc.slip.max", np.ceil(slip), 0)
+    # delay of the renewals of the treated street within the analysis period (yr)
+    delay = [((1 - a0 / 20) * ds[k]["L_eff"] + ds[k]["L_eff"] * j) - ((20 - a0) + 20 * j)
+             for k in KEYS for a0 in np.linspace(0, 20, 2001)[:-1] for j in range(4) if (20 - a0) + 20 * j < 50]
+    put("dsc.delay.max", np.ceil(10 * max(delay)) / 10, 1)                     # rounded up: an upper bound
     codes = site_codes()
     rows = []
     for k in KEYS:
@@ -151,7 +177,6 @@ def main():
     # validation of the canyon floor forcing against the fate curve (from 85_urban_column / alrb.urban)
     fc = load(f"canyon_fatecurve_{TAG}.json")
     put("urb.check.floor", max(ul["validation"]["max_abs_pct"], 0.01), 2)
-    sfac = np.array([[ul[k][n]["st_factor"] for n in ("h0.25", "h0.5", "h1", "h2")] for k in KEYS])
     proxy = np.interp([0.25, 0.5, 1.0, 2.0], [0.0] + fc["h"], [1.0] + fc["floor"])
     for q, (n, pr) in enumerate(zip(("h0p25", "h0p5", "h1", "h2"), proxy)):
         put(f"urb.{n}.proxy", pr, 2)
@@ -196,6 +221,9 @@ def main():
                     f"{rng_(dR[:, q], 1)} \\\\")
         put(f"sv.{n}.min", allf[:, q].min(), 2)
         put(f"sv.{n}.max", allf[:, q].max(), 2)
+        lf = [100 * (sv["sites"][k]["life45"][n] - 1) for k in KEYS]
+        put(f"sv.lf45.{n.replace('_', '')}.min", min(lf), 0)
+        put(f"sv.lf45.{n.replace('_', '')}.max", max(lf), 0)
     (OUT / "tab_sv_rows.tex").write_text("\n".join(rows) + "\n")
     # ------------------------------------------------------------------ Monte Carlo
     p1 = mc["part1"]
@@ -204,11 +232,12 @@ def main():
     put("mc.nstreets", p1["B"]["n_streets"] / 1e6, 1)
     put("mc.ntotal", (p1["B"]["n_streets"] + p1["A"]["n_streets"]) / 1e6, 0)
     MN = {"dynamic": "dyn", "static": "st", "gtp": "gtp"}
-    XN = {"lcz": "lcz", "lcz_e": "lcze", "open": "open", "lowrise": "low", "mixed": "mix", "compact": "comp"}
+    XN = {"lcz": "lcz", "lcz_e": "lcze", "lcz_nom": "lcznom", "open": "open", "lowrise": "low", "mixed": "mix",
+          "compact": "comp"}
     for d in ("A", "B"):
         for m, mn in MN.items():
             for x, xn in XN.items():
-                for wn in ("paved", "pop", "area"):
+                for wn in ("paved", "pop", "area", "sunny"):
                     o = p1[d][x][wn][m]
                     key = f"mc.{d}.{mn}.{xn}" + ("" if wn == "paved" else f".{wn}")
                     for name, arr, nd in (("net", o["net"], 0), ("R", o["R"], 1), ("div", o["net_diverse"], 0),
@@ -216,21 +245,42 @@ def main():
                         put(f"{key}.{name}.lo", arr[0], nd)
                         put(f"{key}.{name}.med", arr[2], nd)
                         put(f"{key}.{name}.hi", arr[4], nd)
-                    V[f"{key}.p"] = pct(o["p_source"])
-                    V[f"{key}.pdiv"] = pct(o["p_source_diverse"])
-                    V[f"{key}.streets"] = pct(o["share_streets_source"])
+                    V[f"{key}.p"] = pct_mc(o["p_source"])
+                    if "p_source_ci" in o:
+                        V[f"{key}.p.cilo"] = pct_mc(o["p_source_ci"][0], "floor")
+                        V[f"{key}.p.cihi"] = pct_mc(o["p_source_ci"][1], "ceil")
+                        for qi, qn in enumerate(("lo", "med", "hi")):
+                            put(f"{key}.net.{qn}.cilo", o["net_ci"][qi][0], 0)
+                            put(f"{key}.net.{qn}.cihi", o["net_ci"][qi][1], 0)
+                    if "share_streets_source_ci" in o:
+                        V[f"{key}.streets.cilo"] = pct_mc(o["share_streets_source_ci"][0], "floor")
+                        V[f"{key}.streets.cihi"] = pct_mc(o["share_streets_source_ci"][1], "ceil")
+                    if "net_productonly" in o:
+                        for qi, qn in ((0, "lo"), (2, "med"), (4, "hi")):
+                            put(f"{key}.prodonly.{qn}", o["net_productonly"][qi], 0)
+                        V[f"{key}.var.prod"] = f"{100 * o['var_share']['product']:.0f}"
+                        V[f"{key}.var.sys"] = f"{100 * o['var_share']['systematic']:.0f}"
+                        put(f"{key}.nonpos", 100 * o["share_burden_nonpositive"], 2)
+                    if "lnR_variance" in o:
+                        lv = o["lnR_variance"]
+                        for k2 in ("street", "systematic", "product", "form"):
+                            V[f"{key}.lnR.{k2[:4]}"] = f"{100 * lv[k2]:.0f}"
+                        put(f"{key}.streetfold", lv["street_fold_med"], 1)
+                        put(f"{key}.formfold", lv["form_fold_med"], 1)
+                    V[f"{key}.pdiv"] = pct_mc(o["p_source_diverse"])
+                    V[f"{key}.streets"] = pct_mc(o["share_streets_source"])
                     if "cells_psource" in o:
-                        V[f"{key}.cells.min"] = pct(o["cells_psource"]["min"])
-                        V[f"{key}.cells.med"] = pct(o["cells_psource"]["med"])
+                        V[f"{key}.cells.min"] = pct_mc(o["cells_psource"]["min"], "floor")
+                        V[f"{key}.cells.med"] = pct_mc(o["cells_psource"]["med"])
                         put(f"{key}.cellfold", o["cellfold_med"], 0)
         dn = [abs(p1[d]["lcz"][wn]["dynamic"]["net"][2] - p1[d]["lcz"]["paved"]["dynamic"]["net"][2]) for wn in ("pop", "area")]
         put(f"mc.{d}.wdnet", max(dn), 1)
         for s, v in p1[d]["by_class"].items():
             sk = s.replace(" ", "").replace("-", "")
-            V[f"mc.{d}.cls.{sk}.src"] = pct(v["share_source"])
+            V[f"mc.{d}.cls.{sk}.src"] = pct_mc(v["share_source"])
             put(f"mc.{d}.cls.{sk}.R.med", v["R"][1], 1)
-        V[f"mc.{d}.cls.compact.min"] = pct(min(p1[d]["by_class"][c]["share_source"]
-                                              for c in ("compact high-rise", "compact mid-rise", "compact low-rise")))
+        V[f"mc.{d}.cls.compact.min"] = pct_mc(min(p1[d]["by_class"][c]["share_source"]
+                                                 for c in ("compact high-rise", "compact mid-rise", "compact low-rise")), "floor")
     lh = p1["B"]["lcz_h"]
     put("lcz.h.med", lh["q"][2], 2)
     put("lcz.h.p05", lh["q"][0], 2)
@@ -239,12 +289,23 @@ def main():
     put("lcz.psi.p05", lh["psi"][0], 2)
     put("lcz.psi.p95", lh["psi"][4], 2)
     sh = mc["lcz_paved_share"]
+    # median aspect ratio of the streets under the nominal ranges of the zones (mixture of uniform laws)
+    nom = {"compact high-rise": (2.0, 3.0), "compact mid-rise": (0.75, 2.0), "compact low-rise": (0.75, 1.5),
+           "open high-rise": (0.75, 1.25), "open mid-rise": (0.3, 0.75), "open low-rise": (0.3, 0.75),
+           "large low-rise": (0.1, 0.3), "heavy industry": (0.2, 0.5)}
+    hx = np.linspace(0.0, 3.0, 30001)
+    cdf = sum(sh[c] * np.clip((hx - a) / (b - a), 0, 1) for c, (a, b) in nom.items()) / sum(sh[c] for c in nom)
+    put("lcz.nom.h.med", float(np.interp(0.5, cdf, hx)), 2)
     V["lcz.share.openlow"] = f"{100 * sh['open low-rise']:.1f}"
     V["lcz.share.large"] = f"{100 * sh['large low-rise']:.1f}"
     V["lcz.share.compact"] = f"{100 * (sh['compact high-rise'] + sh['compact mid-rise'] + sh['compact low-rise']):.1f}"
     V["lcz.share.openhighmid"] = f"{100 * (sh['open high-rise'] + sh['open mid-rise']):.1f}"
     V["lcz.share.industry"] = f"{100 * sh['heavy industry']:.1f}"
     lj = load("conus_lcz_v3.json")
+    for d in ("A", "B"):
+        o = p1[d]["lcz"]["paved"]["dynamic"]
+        for qi, qn in ((0, "lo"), (2, "med"), (4, "hi")):
+            put(f"macro.{d}.{qn}", o["net"][qi] * 1e8 / 1e9, 1)       # Mt CO2e per 100 km2 of treated street
     V["lcz.acc.oa"] = "80"         # overall accuracy of the map, pixel-based and city hold-out (readme of the data set)
     V["lcz.acc.city"] = "48"
     put("lcz.built.km2", lj["built_km2"] / 1e3, 0)
@@ -257,15 +318,17 @@ def main():
         put(f"mc.{d}.cellR50.min", r50.min(), 1)
         put(f"mc.{d}.cellR50.max", r50.max(), 1)
     rows = []
-    lab = {"lcz": "Measured form (reference)", "lcz_e": "Measured form and paved land", "open": "Open streets only",
-           "lowrise": "Assumed low-rise mix", "compact": "Assumed compact mix"}
+    lab = [("lcz", "paved", "LCZ form (reference)"), ("lcz_nom", "paved", "LCZ form, nominal $H/W$"),
+           ("lcz_e", "paved", "LCZ form and paved land"), ("lowrise", "paved", "Assumed low-rise mix"),
+           ("compact", "paved", "Assumed compact mix"), ("open", "paved", "Open streets only"),
+           ("open", "sunny", "Open streets, sunniest cells")]
     q = lambda a, nd=0: f"{f(a[2], nd)} ({f(a[0], nd)} to {f(a[4], nd)})"  # noqa: E731
     for d, dl in (("B", "$T_r=3$\\,yr"), ("A", "$T_r$ 1--10\\,yr")):
-        for i, x in enumerate(lab):
-            o, s, g = p1[d][x]["paved"]["dynamic"], p1[d][x]["paved"]["static"], p1[d][x]["paved"]["gtp"]
-            rows.append(f"{dl if i == 0 else ''} & {lab[x]} & {pct(o['share_streets_source'])} & {q(o['R_streets'], 1)} & "
-                        f"{q(o['net'])} & {pct(o['p_source'])} & {q(o['net_diverse'])} & {q(s['net'])} & {pct(s['p_source'])} & "
-                        f"{pct(g['share_streets_source'])} \\\\")
+        for i, (x, wn, lb_) in enumerate(lab):
+            o, s, g = p1[d][x][wn]["dynamic"], p1[d][x][wn]["static"], p1[d][x][wn]["gtp"]
+            rows.append(f"{dl if i == 0 else ''} & {lb_} & {pct_mc(o['share_streets_source'])} & {q(o['R_streets'], 1)} & "
+                        f"{q(o['net'])} & {pct_mc(o['p_source'])} & {q(o['net_diverse'])} & {q(s['net'])} & "
+                        f"{pct_mc(s['p_source'])} & {pct_mc(g['share_streets_source'])} \\\\")
         if d == "B":
             rows.append("\\addlinespace")
     (OUT / "tab_mc_rows.tex").write_text("\n".join(rows) + "\n")
@@ -273,17 +336,32 @@ def main():
     co = mc["correlation"]
     for d in ("A", "B"):
         base = co[d]["independent"]
-        dn = [c["net"][2] - base["net"][2] for n, c in co[d].items() if n != "independent"]
+        coat = {n: c for n, c in co[d].items() if "Tr" not in n}           # correlations among coating properties
+        dn = [c["net"][2] - base["net"][2] for n, c in coat.items() if n != "independent"]
         put(f"corr.{d}.dnet.min", min(dn), 1)
         put(f"corr.{d}.dnet.max", max(dn), 1)
-        V[f"corr.{d}.p.min"] = pct(min(c["p_source"] for c in co[d].values()))
-        V[f"corr.{d}.streets.min"] = pct(min(c["share_streets_source"] for c in co[d].values()))
-        V[f"corr.{d}.streets.max"] = pct(max(c["share_streets_source"] for c in co[d].values()))
+        V[f"corr.{d}.p.min"] = pct_mc(min(c["p_source"] for c in coat.values()), "floor")
+        V[f"corr.{d}.streets.min"] = pct_mc(min(c["share_streets_source"] for c in coat.values()), "floor")
+        V[f"corr.{d}.streets.max"] = pct_mc(max(c["share_streets_source"] for c in coat.values()), "ceil")
         for n, c in co[d].items():
-            nk = n.replace("+", "p").replace("-", "m").replace(".", "")
+            nk = n.replace("+", "p").replace("-", "m").replace(".", "").replace("_", "")
             put(f"corr.{d}.{nk}.net", c["net"][2], 1)
-            V[f"corr.{d}.{nk}.streets"] = pct(c["share_streets_source"])
-            V[f"corr.{d}.{nk}.p"] = pct(c["p_source"])
+            put(f"corr.{d}.{nk}.dnet", c["net"][2] - base["net"][2], 1)
+            V[f"corr.{d}.{nk}.streets"] = pct_mc(c["share_streets_source"])
+            V[f"corr.{d}.{nk}.p"] = pct_mc(c["p_source"])
+            put(f"corr.{d}.{nk}.rho", c["rho_sample"], 2)
+            put(f"corr.{d}.{nk}.dstreets", 100 * (c["share_streets_source"] - base["share_streets_source"]), 1)
+        trc = [c for n, c in co[d].items() if "Tr" in n]
+        if trc:
+            put(f"corr.{d}.Trtau.dnetabs", max(abs(c["net"][2] - base["net"][2]) for c in trc), 1)
+            V[f"corr.{d}.Trtau.p.min"] = pct_mc(min(c["p_source"] for c in trc), "floor")
+    # streets sharing their properties within a cell: upper bounds of the change over both designs
+    sd = [co[d]["shared_street"] for d in ("A", "B") if "shared_street" in co[d]]
+    if sd:
+        put("corr.shared.dnet.ub", np.ceil(10 * max(abs(c["net"][2] - co[d]["independent"]["net"][2])
+                                                     for d, c in zip(("A", "B"), sd)) + 1e-9) / 10, 1)
+        put("corr.shared.dstreets.ub", np.ceil(1000 * max(abs(c["share_streets_source"] - co[d]["independent"]["share_streets_source"])
+                                                          for d, c in zip(("A", "B"), sd)) + 1e-9) / 10, 1)
     # ------------------------------------------------------------------ distortion
     di = mc["distortion"]
     xs, qs = z["dist_Tr_x"], z["dist_Tr_q"]
@@ -318,6 +396,9 @@ def main():
     put("dist.joint.open3.R", jt["0|3"]["R"]["med"], 2)
     V["dist.joint.open3.paved"] = pct(jt["0|3"]["share_paved_source"])
     V["dist.joint.open3.pop"] = pct(jt["0|3"]["share_pop_source"])
+    V["dist.joint.open3.sinkpaved"] = pct(1 - jt["0|3"]["share_paved_source"])
+    mant, ex = f"{di['check_against_grid_ledger']:.0e}".split("e")
+    V["dist.check"] = f"${int(mant)}\\times10^{{{int(ex)}}}$"
     put("dist.joint.q3.R", jt["0.25|3"]["R"]["med"], 2)
     put("dist.joint.q3.Rmin", jt["0.25|3"]["R"]["min"], 2)
     hh, tt = ["0", "0.25", "0.5", "1", "2"], ["0.5", "0.91", "1.5", "3"]
@@ -329,6 +410,47 @@ def main():
             cells.append(f"{v['factor']['med']:.2f} & {v['R']['med']:.1f} ({v['R']['p05']:.1f}--{v['R']['p95']:.1f})")
         rows.append(f"{b} & " + " & ".join(cells) + " \\\\")
     (OUT / "tab_dist_rows.tex").write_text("\n".join(rows) + "\n")
+    # joint decay time and renewal interval
+    for kk, v in di.get("joint_tau_Tr", {}).items():
+        b, c = kk.split("|")
+        key = f"dist.jt.{b.replace('.', 'p')}.{c.replace('.', 'p')}"
+        put(key + ".R", v["R"]["med"], 2)
+        put(key + ".Rlo", v["R"]["p05"], 2)
+        put(key + ".Rhi", v["R"]["p95"], 2)
+        V[key + ".paved"] = pct(v["share_paved_source"])
+        V[key + ".sinkpaved"] = pct(1 - v["share_paved_source"])
+    # ------------------------------------------------------------------ bounds (88_bounds_revision.py)
+    bd = load("bounds_v3.json")
+    sp = bd["seasonal_psi"]
+    for tau, tk in (("0.91", "ref"), ("0.5", "fast"), ("3", "slow")):
+        for o in ("EW", "NS", "diag"):
+            for h in ("0.5", "1.0"):
+                v = sp[tau][f"{o}|{h}"]
+                put(f"bd.ps.{tk}.{o}.{h.replace('.', 'p')}.lo", 100 * (v["min"] - 1), 1)
+                put(f"bd.ps.{tk}.{o}.{h.replace('.', 'p')}.hi", 100 * (v["max"] - 1), 1)
+    put("bd.ps.ref.NS.max", 100 * (max(sp["0.91"]["NS|0.5"]["max"], sp["0.91"]["NS|1.0"]["max"]) - 1), 1)
+    cl = bd["coat_loss"]
+    put("bd.coat.per", 100 * cl["frac_per_renewal"], 1)
+    put("bd.coat.tot.lo", 100 * cl["frac_total_min"], 1)
+    put("bd.coat.tot.hi", 100 * cl["frac_total_max"], 1)
+    put("bd.coat.n.lo", cl["renewals_min"], 1)
+    put("bd.coat.n.hi", cl["renewals_max"], 1)
+    put("bd.coat.extra", 100 * cl["extra_coat_frac"], 0)
+    kl = bd["kernel_loo"]
+    for k2 in ("loo_min", "loo_max", "loo_rms", "insample_min", "insample_max"):
+        put(f"bd.kernel.{k2.replace('_', '')}", 100 * kl[k2], 1)
+    for hk, v in bd["strain_tables"].items():
+        k3 = f"{int(round(float(hk) * 1000)):03d}"
+        put(f"bd.stt.{k3}.t", 100 * v["eps_t_max"], 1)
+        put(f"bd.stt.{k3}.v", 100 * v["eps_v_max"], 1)
+    # share of the absorption removed from the street that the walls take (fate curve: Durham, east-west)
+    fc = load(f"canyon_fatecurve_{TAG}.json")
+    hfc = np.array(fc["h"])
+    wsh = np.array(fc["walls"]) / np.array(fc["floor"])
+    for hv in (0.5, 1.0, 1.5, 2.0):
+        put(f"cy.fc.wshare.{f'{hv:g}'.replace('.', 'p')}", 100 * float(np.interp(hv, hfc, wsh)), 0)
+    put("cy.fc.wshare.half.h", float(np.interp(0.5, wsh, hfc)), 1)
+    put("cy.fc.escape.1", float(np.interp(1.0, hfc, fc["escape"])), 2)
     lines = ["% generated by scripts/83_numbers_revision.py - do not edit"]
     lines += [f"\\defval{{{k}}}{{{v}}}" for k, v in sorted(V.items())]
     (OUT / "numbers_rev.tex").write_text("\n".join(lines) + "\n")

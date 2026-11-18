@@ -29,7 +29,7 @@ publication.
 | Path | Content |
 |---|---|
 | `alrb/` | model package: forcing and data readers, surface energy balance and freezing column (`column.py`, `driver.py`; forcing of a street in a canyon, `urban.py`), stiffness, layered-elastic solution and damage (`stiffness.py`, `let.py`, `fe_axi.py`, `damage.py`, `structural.py`), radiative kernel and metrics (`kernel.py`, `metrics.py`), ledger (`ledger.py`, `ledger_batch.py`), street-canyon radiosity (`canyon.py`), path tracing and plotting helpers; `config.py` holds the sites, the periods, the paths and the reference parameters |
-| `scripts/` | numbered pipeline (`00`-`05` data retrieval, `10` forcing, `20`-`22` verification, `30`-`36` sweeps and benchmarks, `40`-`41` structure, `50`-`51` projected climates, `60`-`68` sensitivity, ledger, design space, canyons and the contiguous United States, `70` and `83` every number and table row, `80`-`87` discrete renewals, population and local-climate-zone grids, Monte Carlo over streets, streets in canyons and warmer cities, pavement-structure variants) and one script per figure (`fig_*.py`) |
+| `scripts/` | numbered pipeline (`00`-`05` data retrieval, `10` forcing, `20`-`22` verification, `30`-`36` sweeps and benchmarks, `40`-`41` structure, `50`-`51` projected climates, `60`-`68` sensitivity, ledger, design space, canyons and the contiguous United States, `70` and `83` every number and table row, `80`-`88` discrete renewals, population and local-climate-zone grids, Monte Carlo over streets, streets in canyons and warmer cities, pavement-structure variants, bounds on the seasonal urban-form factor, coat removal at renewals, the kernel calibration and the strain tables) and one script per figure (`fig_*.py`) |
 | `data/processed/` | hourly forcing of the ten sites (2017-2024) and the strain table of the reference structure |
 | `results/` | every result (JSON and NPZ) read by the figures and by the number scripts |
 | `figures/` | the figures (PDF and PNG) |
@@ -55,7 +55,7 @@ python scripts/30_pavement_sweep.py v3 --z0m 0.0021 --lw lw --deep dirichlet --z
 bash scripts/run_v3.sh && bash scripts/run_v3b.sh && bash scripts/run_v3c.sh
 python scripts/80_discrete_structure.py && python scripts/81_population_grid.py && python scripts/84_lcz_grid.py
 python scripts/85_urban_column.py && python scripts/86_urban_ledger.py && python scripts/87_structure_variants.py
-python scripts/82_conus_mc.py && python scripts/83_numbers_revision.py
+python scripts/88_bounds_revision.py && python scripts/82_conus_mc.py && python scripts/83_numbers_revision.py
 ```
 
 Most figures and numbers need only the stored results. `70_numbers.py`,
